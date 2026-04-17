@@ -1,0 +1,36 @@
+# ── Build Artifacts ──
+build/
+build_test/
+_build/
+*.o
+*.so
+*.a
+
+# ── Binaries ──
+smartip_engine
+smartip_control
+smartip_alerts
+smartip_cli
+smartip_hls_test
+verify_auth_flow
+verify_pipeline_logic
+tests/bin/
+
+# ── GStreamer & Debug ──
+*.dot
+*.png
+*.log
+test_rec*.mp4
+test_rec*.mkv
+
+# ── System & Editors ──
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
+tags
+
+# ── Temporary ──
+/tmp/
+data/

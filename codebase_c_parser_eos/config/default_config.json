@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "manufacturer_defaults": {
+    "lens1": {
+      "main": {"resolution": "1920x1080", "fps": 25, "encoder": "h264"},
+      "sub":  {"resolution": "640x480",   "fps": 10, "encoder": "h265"},
+      "recording": null,
+      "ai": null
+    },
+    "lens2": {
+      "main": {"resolution": "1920x1080", "fps": 25, "encoder": "h264"},
+      "sub":  {"resolution": "640x480",   "fps": 10, "encoder": "h265"},
+      "recording": null,
+      "ai": null
+    }
+  },
+  "user_overrides": null
+}

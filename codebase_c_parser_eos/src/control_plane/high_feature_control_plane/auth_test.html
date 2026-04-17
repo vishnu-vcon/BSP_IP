@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Smart Camera Control Panel</title>
+  <style>
+    body { font-family: Arial; margin: 40px; }
+    input, select { padding: 6px; margin: 5px; width: 260px; }
+    button { padding: 6px 12px; margin: 5px; cursor: pointer; }
+
+    .panel {
+      border: 1px solid #ccc;
+      padding: 20px;
+      width: 560px;
+      margin-top: 20px;
+    }
+
+    #control_panel { display: none; }
+    #twofa_panel   { display: none; }
+    #otp_panel     { display: none; }
+    #forgot_panel  { display: none; }
+    #reset_panel   { display: none; }
+
+    .status { margin-top: 8px; font-size: 0.9em; }
+    .error  { color: red; }
+    .ok     { color: green; }
+
+    .method-btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 10px 14px;
+      margin: 6px 0;
+      background: #f9f9f9;
+      border: 1px solid #ccc;
+      font-size: 0.95em;
+    }
+    .method-btn:hover { background: #eef; border-color: #66a; }
+
+    .role-badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      font-weight: bold;
+      margin-left: 8px;
+    }
+    .role-admin    { background: #fde; color: #900; }
+    .role-observer { background: #def; color: #006; }
+    .role-viewer   { background: #efe; color: #060; }
+
+    h3 { margin-top: 0; }
+    hr { margin: 14px 0; border: none; border-top: 1px solid #ddd; }
+
+    .role-operator { background: #def; color: #006; }
+    .role-viewer   { background: #efe; color: #060; }
+
+    .section-title {
+      font-size: 0.8em;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #888;
+      margin: 0 0 8px;
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .ctrl-btn {
+      padding: 8px 14px;
+      font-size: 0.88em;
+      cursor: pointer;
+      border: 1px solid #ccc;
+      background: #f9f9f9;
+      border-radius: 4px;
+    }
+    .ctrl-btn:hover:not(.locked) { background: #eef; border-color: #66a; }
+
+    .ctrl-btn.locked {
+      opacity: 0.55;
+      cursor: not-allowed;
+      background: #f4f4f4;
+      border-style: dashed;
+      color: #999;
+    }
+
+    .field-label {
+      font-size: 0.82em;
+      color: #666;
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    /* ── Video Player ── */
+    #stream_player_section {
+      display: none;
+      margin-top: 16px;
+    }
+    #stream_player_section.active {
+      display: block;
+    }
+    #stream_video_wrapper {
+      position: relative;
+      background: #000;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 2px solid #4a4;
+    }
+    #stream_video {
+      width: 100%;
+      max-width: 640px;
+      display: block;
+      background: #000;
+    }
+    #stream_loading_overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.75);
+      color: #fff;
+      font-size: 0.9em;
+      gap: 10px;
+      transition: opacity 0.4s;
+    }
+    #stream_loading_overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid rgba(255,255,255,0.25);
+      border-top-color: #4f4;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #stream_player_label {
+      font-size: 0.8em;
+      color: #4a4;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    #stream_error_msg {
+      color: #c44;
+      font-size: 0.82em;
+      margin-top: 5px;
+      display: none;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+
+<h2>Smart Camera Login</h2>
+
+<!-- ── Step 1: Username + Password ── -->
+<div id="login_panel" class="panel">
+  <h3>Sign In</h3>
+  <label>Username</label><br>
+  <input id="user" placeholder="Enter username"><br>
+
+  <label>Password</label><br>
+  <div style="display:inline-flex;align-items:center;">
+    <input id="pass" type="password" placeholder="Enter password" style="margin-right:4px;">
+    <button type="button" onclick="togglePass('pass', this)"
+      style="padding:6px 10px;cursor:pointer;font-size:0.85em;">Show</button>
+  </div><br>
+
+  <button onclick="login()">Login</button>
+  <button onclick="showForgot()" style="background:none;border:none;color:#448;text-decoration:underline;padding:0;margin-left:10px;">
+    Forgot password?
+  </button>
+
+  <p id="login_status" class="status"></p>
+</div>
+
+
+<!-- ── Step 2: Choose 2FA method ── -->
+<div id="twofa_panel" class="panel">
+  <h3>Two-Factor Authentication</h3>
+  <p id="twofa_msg" style="color:#555;font-size:0.9em;"></p>
+
+  <button class="method-btn" id="btn_email_otp" onclick="chooseEmail()">
+    ✉ Send OTP to Email
+    <span style="font-size:0.8em;color:#888;display:block;" id="email_hint_display"></span>
+  </button>
+
+  <button class="method-btn" id="btn_totp" onclick="chooseTotp()">
+    📱 Use Microsoft Authenticator
+    <span style="font-size:0.8em;color:#888;display:block;">Enter the OTP generated in your Microsoft Authenticator app</span>
+  </button>
+
+  <button onclick="backToLogin()" style="margin-top:10px;background:none;border:none;color:#888;text-decoration:underline;">
+    &larr; Back
+  </button>
+  <p id="twofa_status" class="status"></p>
+</div>
+
+
+<!-- ── Step 3: Enter OTP / TOTP code ── -->
+<div id="otp_panel" class="panel">
+  <h3 id="otp_title">Enter Code</h3>
+  <p id="otp_msg" style="color:#555;font-size:0.9em;"></p>
+
+  <!-- MS Authenticator hint (only shown in totp mode) -->
+  <div id="totp_hint_box" style="display:none;background:#f0f4ff;border-left:4px solid #0078d4;
+       padding:10px 14px;margin:10px 0;border-radius:4px;font-size:0.88em;color:#333;">
+    📱 Open <strong>Microsoft Authenticator</strong> on your phone and enter the
+    6-digit code shown next to <strong>SmartCamera</strong>.<br>
+    <span style="color:#888;">Codes refresh every 30 seconds.</span><br>
+    <a id="resend_setup_link" href="#" onclick="resendTotpSetup(event)"
+       style="font-size:0.9em;color:#0078d4;text-decoration:underline;margin-top:4px;display:inline-block;">
+      Re-send setup email to my registered address
+    </a>
+    <span id="resend_status" style="font-size:0.85em;margin-left:8px;"></span>
+  </div>
+
+  <label id="otp_label">Code</label><br>
+  <input id="otp_input" maxlength="6" placeholder="000000"
+    style="font-size:1.4em;letter-spacing:0.3em;width:180px;"
+    onkeydown="if(event.key==='Enter') submitOtp()"><br>
+
+  <button onclick="submitOtp()">Verify</button>
+  <button onclick="backToTwofa()" style="background:none;border:none;color:#888;text-decoration:underline;">
+    &larr; Try another way
+  </button>
+
+  <p id="otp_status" class="status"></p>
+</div>
+
+
+<!-- ── Forgot Password: enter username + choose method ── -->
+<div id="forgot_panel" class="panel">
+  <h3>Reset Password</h3>
+  <label>Username</label><br>
+  <input id="forgot_user" placeholder="Your username"><br>
+
+  <button class="method-btn" onclick="forgotViaEmail()">
+    ✉ Send OTP to Email
+    <span style="font-size:0.8em;color:#888;display:block;">OTP sent to your registered email</span>
+  </button>
+
+  <button class="method-btn" onclick="forgotViaTotp()">
+    📱 Use Microsoft Authenticator
+    <span style="font-size:0.8em;color:#888;display:block;">Enter OTP from your Microsoft Authenticator app</span>
+  </button>
+
+  <button onclick="backToLogin()" style="margin-top:10px;background:none;border:none;color:#888;text-decoration:underline;">
+    &larr; Back to login
+  </button>
+  <p id="forgot_status" class="status"></p>
+</div>
+
+
+<!-- ── Reset Password: enter new password ── -->
+<div id="reset_panel" class="panel">
+  <h3>Set New Password</h3>
+  <p style="font-size:0.85em;color:#666;">
+    Must have uppercase, lowercase, number, special char (@#$%^&amp;*!)
+  </p>
+
+  <label>New Password</label><br>
+  <div style="display:inline-flex;align-items:center;">
+    <input id="new_pass" type="password" placeholder="New password" style="margin-right:4px;">
+    <button type="button" onclick="togglePass('new_pass', this)"
+      style="padding:6px 10px;cursor:pointer;font-size:0.85em;">Show</button>
+  </div><br>
+
+  <label>Confirm Password</label><br>
+  <div style="display:inline-flex;align-items:center;">
+    <input id="confirm_pass" type="password" placeholder="Confirm password" style="margin-right:4px;">
+    <button type="button" onclick="togglePass('confirm_pass', this)"
+      style="padding:6px 10px;cursor:pointer;font-size:0.85em;">Show</button>
+  </div><br>
+
+  <button onclick="submitNewPassword()">Update Password</button>
+
+  <p id="reset_status" class="status"></p>
+</div>
+
+
+<!-- ── Control Panel (after login) ── -->
+<div id="control_panel" class="panel" style="width:640px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <h3 style="margin:0;">
+      Smart Camera Control Panel
+      <span class="role-badge" id="role_badge"></span>
+    </h3>
+    <button onclick="logout()" style="background:none;border:1px solid #ccc;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:0.85em;">Logout</button>
+  </div>
+  <p id="role_display" style="color:#777;font-size:0.85em;margin:6px 0 0;"></p>
+
+  <hr>
+
+  <!-- Stream Controls -->
+  <div class="section-title">Stream Controls</div>
+  <div style="margin-bottom:8px;">
+    <label class="field-label">Select Camera</label>
+    <select id="cameraId" style="width:240px;">
+      <option value="0">Camera 0 — /dev/video0 (check connection)</option>
+      <option value="1">Camera 1 — /dev/video1 (check connection)</option>
+      <option value="2">Camera 2 — /dev/video2 (check connection)</option>
+      <option value="3" selected>Camera 3 — /dev/video3 ✔ Active</option>
+      <option value="4">Camera 4 — /dev/video4 ✔ Active</option>
+    </select>
+  </div>
+  <div class="btn-row">
+    <button class="ctrl-btn" id="btn_start_stream" onclick="guardedAction('start-stream', startStream)">&#9654; Start Stream</button>
+    <button class="ctrl-btn" id="btn_stop_stream"  onclick="guardedAction('stop-stream',  stopStream)">&#9632; Stop Stream</button>
+    <button class="ctrl-btn" id="btn_secure_data"  onclick="guardedAction('secure-data',  secureData)">&#128274; Secure Data</button>
+  </div>
+
+  <!-- ── Stream Tab Link (shown after stream starts) ── -->
+  <div id="stream_player_section" style="display:none;margin-top:12px;padding:12px 16px;background:#f0fff0;border:1px solid #4a4;border-radius:6px;">
+    <span style="font-size:0.9em;color:#363;">&#128249; Stream is running &mdash;</span>
+    <a id="stream_open_link" href="https://192.168.1.160:8443/player.html" target="_blank"
+       style="margin-left:8px;font-size:0.9em;color:#00a;text-decoration:underline;font-weight:bold;">
+      Open Live View &nearr;
+    </a>
+  </div>
+
+  <hr>
+
+  <!-- Device Controls -->
+  <div class="section-title">Device Controls</div>
+  <div class="btn-row">
+    <button class="ctrl-btn" id="btn_device_status" onclick="guardedAction('device:status',        deviceStatus)">&#128202; Device Status</button>
+    <button class="ctrl-btn" id="btn_config_reset"  onclick="guardedAction('device:config-reset',  configReset)">&#9881; Config Reset</button>
+    <button class="ctrl-btn" id="btn_network_reset" onclick="guardedAction('device:network-reset', networkReset)">&#127760; Network Reset</button>
+    <button class="ctrl-btn" id="btn_device_reboot" onclick="guardedAction('device:reboot',        deviceReboot)">&#128260; Reboot</button>
+    <button class="ctrl-btn" id="btn_factory_reset" onclick="guardedAction('device:factory-reset', factoryReset)">&#9888; Factory Reset</button>
+  </div>
+
+  <hr>
+
+  <!-- Admin: Add User -->
+  <div id="add_user_section">
+    <div class="section-title">User Management <span style="font-size:0.75em;color:#bbb;font-weight:normal;">(admin only)</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:500px;">
+      <div>
+        <label class="field-label">Username</label>
+        <input id="new_username" placeholder="Username" style="width:100%;margin:0;">
+      </div>
+      <div>
+        <label class="field-label">Password</label>
+        <input id="new_password" type="password" placeholder="Password" style="width:100%;margin:0;">
+      </div>
+      <div>
+        <label class="field-label">Email</label>
+        <input id="new_email" placeholder="Email" style="width:100%;margin:0;">
+      </div>
+      <div>
+        <label class="field-label">Role</label>
+        <select id="new_role" style="width:100%;padding:6px;margin:0;">
+          <option value="viewer">Viewer</option>
+          <option value="operator">Operator</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+    </div>
+    <button class="ctrl-btn" id="btn_add_user" onclick="guardedAction('manage:add-user', addUser)" style="margin-top:10px;">&#10133; Add User</button>
+  </div>
+
+  <p id="result" class="status" style="white-space:pre-wrap;margin-top:12px;"></p>
+</div>
+
+
+<script>
+  const BASE = "";
+
+  let token        = null;
+  let role         = null;
+  let currentUser  = null;
+  let forgotMethod = null;
+
+  const SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+  // ── Restore session after page refresh ────────────────────────────────────
+  window.onload = function () {
+    const savedToken   = sessionStorage.getItem("token");
+    const savedRole    = sessionStorage.getItem("role");
+    const savedUser    = sessionStorage.getItem("currentUser");
+    const savedPage    = sessionStorage.getItem("currentPage");
+    const savedExpiry  = parseInt(sessionStorage.getItem("sessionExpiry") || "0", 10);
+
+    if (savedToken && savedRole && savedUser) {
+      // Check if 2-hour session has expired
+      if (Date.now() > savedExpiry) {
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("role");
+        sessionStorage.removeItem("currentUser");
+        sessionStorage.removeItem("currentPage");
+        sessionStorage.removeItem("sessionExpiry");
+        status("login_status", "\u26a0\ufe0f Your session has expired. Please log in again.", true);
+        return;
+      }
+
+      token       = savedToken;
+      role        = savedRole;
+      currentUser = savedUser;
+
+      if (savedPage === "dashboard") {
+        showControlPanel();
+        scheduleSessionExpiry(savedExpiry - Date.now());
+      }
+    }
+  };
+
+  let _sessionTimer = null;
+  function scheduleSessionExpiry(remainingMs) {
+    if (_sessionTimer) clearTimeout(_sessionTimer);
+    _sessionTimer = setTimeout(() => {
+      showSessionExpired("Your 2-hour session has expired. Please log in again.");
+    }, remainingMs);
+  }
+
+  // ── Global API wrapper — detects 401 (expired/invalid token) + server down ─
+
+  async function apiFetch(url, options = {}) {
+    try {
+      const res = await fetch(url, options);
+
+      if (res.status === 401) {
+        showSessionExpired("Your session token has expired. Please log in again.");
+        return null;
+      }
+
+      return res;
+
+    } catch (e) {
+      showSessionExpired("Server is unreachable. It may have gone down. Please log in again.");
+      return null;
+    }
+  }
+
+  function showSessionExpired(message) {
+    if (_sessionTimer) { clearTimeout(_sessionTimer); _sessionTimer = null; }
+
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("role");
+    sessionStorage.removeItem("currentUser");
+    sessionStorage.removeItem("currentPage");
+    sessionStorage.removeItem("sessionExpiry");
+    token       = null;
+    role        = null;
+    currentUser = null;
+
+    const result = document.getElementById("result");
+    if (result) {
+      result.textContent = "\u26a0\ufe0f " + message;
+      result.className   = "status error";
+    }
+
+    setTimeout(() => {
+      backToLogin();
+      status("login_status", "\u26a0\ufe0f " + message, true);
+    }, 2000);
+  }
+
+  // ── Show / Hide password toggle ────────────────────────────────────────────
+
+  function togglePass(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (input.type === "password") {
+      input.type = "text";
+      btn.textContent = "Hide";
+    } else {
+      input.type = "password";
+      btn.textContent = "Show";
+    }
+  }
+
+  function show(id) {
+    ["login_panel","twofa_panel","otp_panel","forgot_panel","reset_panel","control_panel"]
+      .forEach(p => document.getElementById(p).style.display = "none");
+    document.getElementById(id).style.display = "block";
+  }
+
+  function status(id, msg, isError) {
+    const el = document.getElementById(id);
+    el.textContent  = msg;
+    el.className    = "status " + (isError ? "error" : "ok");
+  }
+
+  function clearStatus(id) {
+    const el = document.getElementById(id);
+    el.textContent = "";
+    el.className   = "status";
+  }
+
+  function backToLogin() {
+    clearStatus("login_status");
+    show("login_panel");
+  }
+
+  function backToTwofa() {
+    clearStatus("twofa_status");
+    document.getElementById("totp_hint_box").style.display = "none";
+    show("twofa_panel");
+  }
+
+  // ── Step 1: Login ──────────────────────────────────────────────────────────
+
+  async function login() {
+    clearStatus("login_status");
+    const username = document.getElementById("user").value.trim();
+    const password = document.getElementById("pass").value;
+
+    if (!username || !password) {
+      status("login_status", "Please fill in username and password", true);
+      return;
+    }
+
+    try {
+      const res  = await fetch(`${BASE}/login`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        status("login_status", data.error || "Login failed", true);
+        return;
+      }
+
+      // Password OK — show 2FA choice
+      currentUser = data.username;
+
+      document.getElementById("twofa_msg").textContent =
+        `Logged in as ${currentUser}. Choose how to verify:`;
+
+      const btnEmail = document.getElementById("btn_email_otp");
+      const btnTotp  = document.getElementById("btn_totp");
+
+      btnEmail.style.display = data.has_email ? "block" : "none";
+      btnTotp.style.display  = data.has_totp  ? "block" : "none";
+
+      document.getElementById("email_hint_display").textContent =
+        data.email_hint ? `\u2192 ${data.email_hint}` : "";
+
+      show("twofa_panel");
+
+    } catch (e) {
+      status("login_status", "Server connection error", true);
+    }
+  }
+
+  // ── Step 2a: Email OTP ─────────────────────────────────────────────────────
+
+  async function chooseEmail() {
+    clearStatus("twofa_status");
+    try {
+      const res  = await fetch(`${BASE}/send-email-otp`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ username: currentUser }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        status("twofa_status", data.error || "Failed to send OTP", true);
+        return;
+      }
+
+      document.getElementById("otp_title").textContent = "Check Your Email";
+      document.getElementById("otp_msg").textContent   = data.message;
+      document.getElementById("otp_label").textContent = "Email OTP";
+      document.getElementById("otp_input").value       = "";
+      clearStatus("otp_status");
+      document.getElementById("totp_hint_box").style.display = "none";
+
+      window._otpMode = "email";
+      show("otp_panel");
+
+    } catch (e) {
+      status("twofa_status", "Server connection error", true);
+    }
+  }
+
+  // ── Step 2b: Microsoft Authenticator OTP ────────────────────────────────────
+
+  function chooseTotp() {
+    document.getElementById("otp_title").textContent = "Microsoft Authenticator Code";
+    document.getElementById("otp_msg").textContent   =
+      "Enter the 6-digit code currently shown in your Microsoft Authenticator app.";
+    document.getElementById("otp_label").textContent = "Authenticator Code";
+    document.getElementById("otp_input").value       = "";
+    clearStatus("otp_status");
+
+    // Show the MS Authenticator hint + resend setup link
+    document.getElementById("totp_hint_box").style.display = "block";
+    document.getElementById("resend_status").textContent   = "";
+
+    window._otpMode = "totp";
+    show("otp_panel");
+  }
+
+  async function resendTotpSetup(e) {
+    e.preventDefault();
+    const statusEl = document.getElementById("resend_status");
+    statusEl.textContent = "Sending\u2026";
+    statusEl.style.color = "#555";
+    try {
+      const res  = await fetch(`${BASE}/resend-totp-setup`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ username: currentUser }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        statusEl.textContent = "\u2705 Setup email sent to your registered address!";
+        statusEl.style.color = "green";
+      } else {
+        statusEl.textContent = "\u274c " + (data.error || "Failed to send");
+        statusEl.style.color = "red";
+      }
+    } catch {
+      statusEl.textContent = "\u274c Network error";
+      statusEl.style.color = "red";
+    }
+  }
+
+  // ── Step 3: Verify OTP / TOTP ──────────────────────────────────────────────
+
+  async function submitOtp() {
+    clearStatus("otp_status");
+    const code = document.getElementById("otp_input").value.trim();
+    if (!code) {
+      status("otp_status", "Please enter the code", true);
+      return;
+    }
+
+    try {
+      let res, data;
+
+      if (window._otpMode === "email") {
+        res  = await fetch(`${BASE}/verify-otp`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ username: currentUser, otp: code }),
+        });
+      } else {
+        res  = await fetch(`${BASE}/verify-totp`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ username: currentUser, code }),
+        });
+      }
+
+      data = await res.json();
+
+      if (!res.ok) {
+        status("otp_status", data.error || "Invalid code", true);
+        return;
+      }
+
+      // Login complete
+      token = data.token;
+      role  = data.role;
+
+      // Persist session and set 2-hour expiry
+      const expiryTime = Date.now() + SESSION_DURATION_MS;
+      sessionStorage.setItem("token",         data.token);
+      sessionStorage.setItem("role",          data.role);
+      sessionStorage.setItem("currentUser",   currentUser);
+      sessionStorage.setItem("currentPage",   "dashboard");
+      sessionStorage.setItem("sessionExpiry", String(expiryTime));
+      scheduleSessionExpiry(SESSION_DURATION_MS);
+
+      showControlPanel();
+
+    } catch (e) {
+      status("otp_status", "Server connection error", true);
+    }
+  }
+
+  // ── Permission map (mirrors role_manager.py) ──────────────────────────────
+
+  const PERMISSIONS = {
+    "admin":    [
+      "secure-data", "reboot", "update-config", "start-stream", "stop-stream",
+      "device:reboot", "device:network-reset", "device:factory-reset",
+      "device:config-reset", "device:status", "manage:add-user"
+    ],
+    "operator": [
+      "secure-data", "start-stream", "stop-stream",
+      "device:status", "device:network-reset", "device:config-reset"
+    ],
+    "viewer":   [
+      "secure-data", "start-stream", "stop-stream", "device:status"
+    ],
+  };
+
+  function canDo(action) {
+    return (PERMISSIONS[role] || []).includes(action);
+  }
+
+  // Run fn if permitted; show permission denied message if not
+  function guardedAction(action, fn) {
+    if (!canDo(action)) {
+      status("result",
+        `Permission denied \u2014 your role (${role.toUpperCase()}) cannot perform: ${action}`, true);
+      return;
+    }
+    fn();
+  }
+
+  // ── Control Panel ──────────────────────────────────────────────────────────
+
+  function showControlPanel() {
+    document.getElementById("role_display").textContent =
+      `Signed in as: ${currentUser}  |  Role: ${role}`;
+
+    const badge = document.getElementById("role_badge");
+    badge.textContent = role.toUpperCase();
+    badge.className   = `role-badge role-${role}`;
+
+    // Apply locked style to all buttons based on permissions
+    const btnMap = {
+      "btn_start_stream":  "start-stream",
+      "btn_stop_stream":   "stop-stream",
+      "btn_secure_data":   "secure-data",
+      "btn_device_status": "device:status",
+      "btn_config_reset":  "device:config-reset",
+      "btn_network_reset": "device:network-reset",
+      "btn_device_reboot": "device:reboot",
+      "btn_factory_reset": "device:factory-reset",
+      "btn_add_user":      "manage:add-user",
+    };
+
+    for (const [btnId, action] of Object.entries(btnMap)) {
+      const btn = document.getElementById(btnId);
+      if (!btn) continue;
+      if (canDo(action)) {
+        btn.classList.remove("locked");
+        btn.title = "";
+      } else {
+        btn.classList.add("locked");
+        btn.title = `Your role (${role}) does not have permission for: ${action}`;
+      }
+    }
+
+    clearStatus("result");
+    show("control_panel");
+  }
+
+  // ── HLS Player State (stream opens in separate tab via https_Cported server) ──
+  function showStreamPlayer() {
+    // Show the "Open Live View" link banner
+    document.getElementById("stream_player_section").style.display = "block";
+  }
+
+  function hideStreamPlayer() {
+    // Hide the link banner when stream is stopped
+    document.getElementById("stream_player_section").style.display = "none";
+  }
+async function startStream() {
+  clearStatus("result");
+
+  const camId = parseInt(document.getElementById("cameraId").value, 10);
+
+  const res = await apiFetch(`${BASE}/start-stream`, {
+    method:  "POST",
+    headers: {
+      "Authorization": token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ camera_id: camId })
+  });
+
+  if (!res) return;
+
+  const data = await res.json();
+  if (!res.ok) {
+    status("result", data.error || "Error", true);
+    return;
+  }
+
+  status("result", `Camera ${camId}: ${data.message} — Opening stream in new tab…`);
+
+  // Open the HLS player page in a new browser tab
+  const streamTab = window.open("https://192.168.1.160:8443/player.html", "_blank");
+  if (!streamTab) {
+    // Fallback if pop-up was blocked
+    status("result", `Stream started. ` +
+      `<a href="https://192.168.1.160:8443/player.html" target="_blank" ` +
+      `style="color:#00a;text-decoration:underline;">Click here to open stream</a>`, false);
+  }
+}
+  async function stopStream() {
+    clearStatus("result");
+    const res = await apiFetch(`${BASE}/stop-stream`, {
+      method:  "POST",
+      headers: { "Authorization": token },
+    });
+    if (!res) return;
+    const data = await res.json();
+    status("result", data.message || data.error, !res.ok);
+    if (res.ok) hideStreamPlayer();
+  }
+
+  async function secureData() {
+    clearStatus("result");
+    const res = await apiFetch(`${BASE}/secure-data`, {
+      headers: { "Authorization": token },
+    });
+    if (!res) return;
+    const data = await res.json();
+    if (!res.ok) { status("result", data.error || "Access denied", true); return; }
+    status("result", JSON.stringify(data, null, 2));
+  }
+
+
+  async function deviceStatus() {
+    clearStatus("result");
+    const res = await apiFetch(`${BASE}/device/status`, {
+      headers: { "Authorization": token },
+    });
+    if (!res) return;
+    const data = await res.json();
+    if (!res.ok) { status("result", data.error || "Error", true); return; }
+
+    // ✅ Properly extract nested storage fields
+    const s = data.storage;
+    const storageStr = `SD: ${s.sd_emmc.free} free (${s.sd_emmc.percent}) | ` +
+                       `Camera: ${s.camera_recordings.free} free (${s.camera_recordings.percent}) | ` +
+                       `RAM: ${s.ram.free} free (${s.ram.percent})`;
+
+    // ✅ Properly map the network array
+    const networkStr = data.network
+      .map(n => `${n.interface}: ${n.ip} [${n.status}]`)
+      .join(' | ');
+
+    status("result", `Uptime: ${data.uptime}  |  Storage: ${storageStr}  |  Network: ${networkStr}`);
+}
+
+
+  async function configReset() {
+    clearStatus("result");
+    if (!confirm("Reset device config to defaults?")) return;
+    const res = await apiFetch(`${BASE}/device/config-reset`, {
+      method:  "POST",
+      headers: { "Authorization": token },
+    });
+    if (!res) return;
+    const data = await res.json();
+    status("result", data.message || data.error, !res.ok);
+  }
+
+  async function networkReset() {
+    clearStatus("result");
+    if (!confirm("Reset network interfaces? This may drop the current connection.")) return;
+    const res = await apiFetch(`${BASE}/device/network-reset`, {
+      method:  "POST",
+      headers: { "Authorization": token },
+    });
+    if (!res) return;
+    const data = await res.json();
+    status("result", data.message || data.error, !res.ok);
+  }
+
+  async function deviceReboot() {
+    clearStatus("result");
+    if (!confirm("Are you sure you want to reboot the device?")) return;
+    const res = await apiFetch(`${BASE}/device/reboot`, {
+      method:  "POST",
+      headers: { "Authorization": token },
+    });
+    if (!res) return;
+    const data = await res.json();
+    status("result", data.message || data.error, !res.ok);
+  }
+
+  async function factoryReset() {
+    clearStatus("result");
+    if (!confirm("WARNING: This will wipe ALL config, users and data. Are you absolutely sure?")) return;
+    const res = await apiFetch(`${BASE}/device/factory-reset`, {
+      method:  "POST",
+      headers: { "Authorization": token, "Content-Type": "application/json" },
+      body:    JSON.stringify({ confirm: true }),
+    });
+    if (!res) return;
+    const data = await res.json();
+    status("result", data.message || data.error, !res.ok);
+  }
+
+  async function addUser() {
+    clearStatus("result");
+    const username = document.getElementById("new_username").value.trim();
+    const password = document.getElementById("new_password").value;
+    const email    = document.getElementById("new_email").value.trim();
+    const newRole  = document.getElementById("new_role").value;
+
+    if (!username || !password || !email) {
+      status("result", "Username, password and email are required", true);
+      return;
+    }
+
+    const res = await apiFetch(`${BASE}/add-user`, {
+      method:  "POST",
+      headers: { "Authorization": token, "Content-Type": "application/json" },
+      body:    JSON.stringify({ username, password, email, role: newRole }),
+    });
+    if (!res) return;
+    const data = await res.json();
+    if (!res.ok) { status("result", data.error || "Failed to add user", true); return; }
+    status("result", `User '${username}' added successfully with role: ${newRole}`);
+    document.getElementById("new_username").value = "";
+    document.getElementById("new_password").value = "";
+    document.getElementById("new_email").value    = "";
+  }
+
+  function logout() {
+    if (_sessionTimer) { clearTimeout(_sessionTimer); _sessionTimer = null; }
+    hideStreamPlayer();
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("role");
+    sessionStorage.removeItem("currentUser");
+    sessionStorage.removeItem("currentPage");
+    sessionStorage.removeItem("sessionExpiry");
+    token       = null;
+    role        = null;
+    currentUser = null;
+    document.getElementById("user").value = "";
+    document.getElementById("pass").value = "";
+    clearStatus("result");
+    backToLogin();
+  }
+
+  // ── Forgot Password ────────────────────────────────────────────────────────
+
+  function showForgot() {
+    document.getElementById("forgot_user").value = "";
+    clearStatus("forgot_status");
+    show("forgot_panel");
+  }
+
+  async function forgotViaEmail() {
+    clearStatus("forgot_status");
+    const username = document.getElementById("forgot_user").value.trim();
+    if (!username) {
+      status("forgot_status", "Please enter your username", true);
+      return;
+    }
+    forgotMethod = "email";
+    currentUser  = username;
+
+    try {
+      const res  = await fetch(`${BASE}/forgot-send-email`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ username }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        status("forgot_status", data.error || "Failed to send email", true);
+        return;
+      }
+
+      document.getElementById("otp_title").textContent = "Reset via Email";
+      document.getElementById("otp_msg").textContent   = data.message;
+      document.getElementById("otp_label").textContent = "Reset OTP";
+      document.getElementById("otp_input").value       = "";
+      clearStatus("otp_status");
+
+      window._otpMode = "forgot_email";
+      show("otp_panel");
+
+    } catch (e) {
+      status("forgot_status", "Server connection error", true);
+    }
+  }
+
+  function forgotViaTotp() {
+    clearStatus("forgot_status");
+    const username = document.getElementById("forgot_user").value.trim();
+    if (!username) {
+      status("forgot_status", "Please enter your username", true);
+      return;
+    }
+    forgotMethod = "totp";
+    currentUser  = username;
+
+    document.getElementById("otp_title").textContent = "Reset via Microsoft Authenticator";
+    document.getElementById("otp_msg").textContent   =
+      "Enter the 6-digit code currently shown in your Microsoft Authenticator app.";
+    document.getElementById("otp_label").textContent = "Authenticator Code";
+    document.getElementById("otp_input").value       = "";
+    clearStatus("otp_status");
+
+    // Show hint box with resend option
+    document.getElementById("totp_hint_box").style.display = "block";
+    document.getElementById("resend_status").textContent   = "";
+
+    window._otpMode = "forgot_totp";
+    show("otp_panel");
+  }
+
+  // submitOtp() handles forgot_email and forgot_totp modes too:
+  const _originalSubmitOtp = submitOtp;
+  submitOtp = async function() {
+    if (window._otpMode === "forgot_email") {
+      clearStatus("otp_status");
+      const code = document.getElementById("otp_input").value.trim();
+      if (!code) { status("otp_status", "Please enter the code", true); return; }
+      try {
+        const res  = await fetch(`${BASE}/forgot-verify-otp`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ username: currentUser, otp: code }),
+        });
+        const data = await res.json();
+        if (!res.ok) { status("otp_status", data.error || "Invalid OTP", true); return; }
+        showResetPanel();
+      } catch (e) { status("otp_status", "Server connection error", true); }
+
+    } else if (window._otpMode === "forgot_totp") {
+      clearStatus("otp_status");
+      const code = document.getElementById("otp_input").value.trim();
+      if (!code) { status("otp_status", "Please enter the code", true); return; }
+      try {
+        const res  = await fetch(`${BASE}/forgot-verify-totp`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ username: currentUser, code }),
+        });
+        const data = await res.json();
+        if (!res.ok) { status("otp_status", data.error || "Invalid code", true); return; }
+        showResetPanel();
+      } catch (e) { status("otp_status", "Server connection error", true); }
+
+    } else {
+      _originalSubmitOtp();
+    }
+  };
+
+  function showResetPanel() {
+    document.getElementById("new_pass").value     = "";
+    document.getElementById("confirm_pass").value = "";
+    clearStatus("reset_status");
+    show("reset_panel");
+  }
+
+  async function submitNewPassword() {
+    clearStatus("reset_status");
+    const newPass  = document.getElementById("new_pass").value;
+    const confirm  = document.getElementById("confirm_pass").value;
+
+    if (newPass !== confirm) {
+      status("reset_status", "Passwords do not match", true);
+      return;
+    }
+
+    try {
+      const res  = await fetch(`${BASE}/reset-password`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ username: currentUser, new_password: newPass }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        status("reset_status", data.error || "Reset failed", true);
+        return;
+      }
+      status("reset_status", "Password updated! Redirecting to login...");
+      setTimeout(backToLogin, 2000);
+    } catch (e) {
+      status("reset_status", "Server connection error", true);
+    }
+  }
+</script>
+
+</body>
+</html>

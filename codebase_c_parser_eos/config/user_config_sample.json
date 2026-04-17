@@ -1,0 +1,51 @@
+{
+  "enabled": true,
+  "user_overrides": {
+    "lens1": {
+      "rtsp": {
+        "main": {
+          "resolution": "1920x1080",
+          "fps": 30,
+          "encoder": "h264",
+          "bitrate": 5000000
+        },
+        "sub": {
+          "resolution": "640x480",
+          "fps": 15,
+          "encoder": "h265",
+          "bitrate": 1000000
+        }
+      },
+      "recording": {
+        "main": {
+          "mode": "scheduled",
+          "max_segment_sec": 300,
+          "schedule": {
+            "type": "daily",
+            "daily_start_sec": 32400, 
+            "daily_end_sec": 61200
+          }
+        },
+        "sub": {
+          "mode": "continuous",
+          "max_segment_sec": 60
+        }
+      }
+    },
+    "lens2": {
+      "rtsp": {
+        "main": {
+          "resolution": "1280x720",
+          "fps": 20,
+          "encoder": "h264"
+        }
+      },
+      "recording": {
+        "main": {
+          "mode": "event",
+          "idle_timeout": 120
+        }
+      }
+    }
+  }
+}

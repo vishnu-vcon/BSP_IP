@@ -1,0 +1,93 @@
+{
+  "enabled" : true,
+  "manufacturer_defaults" : {
+    "lens1" : {
+      "main" : {
+        "resolution" : "1920x1080",
+        "fps" : 25,
+        "encoder" : "h264"
+      },
+      "sub" : {
+        "resolution" : "640x480",
+        "fps" : 10,
+        "encoder" : "h265"
+      },
+      "recording" : null,
+      "ai" : null
+    },
+    "lens2" : {
+      "main" : {
+        "resolution" : "1920x1080",
+        "fps" : 25,
+        "encoder" : "h264"
+      },
+      "sub" : {
+        "resolution" : "640x480",
+        "fps" : 10,
+        "encoder" : "h265"
+      },
+      "recording" : null,
+      "ai" : null
+    }
+  },
+  "user_overrides" : {
+    "lens1" : {
+      "cairo" : false,
+      "overlay" : true,
+      "ai" : {
+        "ai_threshold" : 0.40000000000000002,
+        "snapshot_threshold" : 0.40000000000000002
+      },
+      "main" : {
+        "resolution" : "1920x1080",
+        "fps" : 25,
+        "encoder" : "h264",
+        "overlay" : true,
+        "ntp_overlay" : false
+      },
+      "third" : {
+        "resolution" : "640x480",
+        "fps" : 3,
+        "encoder" : "h264",
+        "overlay" : false,
+        "ntp_overlay" : false
+      },
+      "sub" : {
+        "resolution" : "1280x720",
+        "fps" : 10,
+        "encoder" : "h264",
+        "overlay" : true,
+        "ntp_overlay" : false
+      }
+    },
+    "lens2" : {
+      "cairo" : true,
+      "overlay" : true,
+      "ai" : {
+        "ai_threshold" : 0.0,
+        "snapshot_threshold" : 0.0
+      },
+      "sub" : {
+        "resolution" : "640x480",
+        "fps" : 10,
+        "encoder" : "h265",
+        "overlay" : true,
+        "ntp_overlay" : false
+      },
+      "main" : {
+        "resolution" : "1920x1080",
+        "fps" : 25,
+        "encoder" : "h264",
+        "overlay" : true,
+        "ntp_overlay" : false
+      },
+      "third" : {
+        "resolution" : "640x480",
+        "fps" : 3,
+        "encoder" : "h264",
+        "overlay" : false,
+        "ntp_overlay" : false
+      }
+    }
+  }
+}

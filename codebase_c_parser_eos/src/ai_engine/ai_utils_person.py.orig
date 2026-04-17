@@ -1,0 +1,96 @@
+"""
+ai_utils_person.py
+---------------------
+Simple Person Tracker for debugging. 
+Extracts Class 0 (often Person) from models.
+"""
+import numpy as np
+
+CONF_THRESHOLD = 0.10
+NMS_THRESHOLD = 0.45
+
+class PersonTracker:
+    def __init__(self):
+        self.saved_violations = set()
+
+    def _nms(self, boxes, scores, thresh):
+        if len(boxes) == 0:
+            return []
+        x1, y1 = boxes[:, 0] - boxes[:, 2]/2, boxes[:, 1] - boxes[:, 3]/2
+        x2, y2 = boxes[:, 0] + boxes[:, 2]/2, boxes[:, 1] + boxes[:, 3]/2
+        areas = (x2 - x1) * (y2 - y1)
+        order = scores.argsort()[::-1]
+        keep = []
+        while order.size > 0:
+            i = order[0]
+            keep.append(i)
+            xx1, yy1 = np.maximum(x1[i], x1[order[1:]]), np.maximum(y1[i], y1[order[1:]])
+            xx2, yy2 = np.minimum(x2[i], x2[order[1:]]), np.minimum(y2[i], y2[order[1:]])
+            inter = np.maximum(0, xx2-xx1) * np.maximum(0, yy2-yy1)
+            iou = inter / (areas[i] + areas[order[1:]] - inter + 1e-6)
+            order = order[np.where(iou <= thresh)[0] + 1]
+        return keep
+
+    def process(self, output_data, scale_factor, zero_point, frame_scale, pad_x, pad_y, ml_w, ml_h, threshold=None):
+        out = output_data
+        conf_thresh = threshold if threshold is not None else CONF_THRESHOLD
+        
+        if scale_factor: 
+            out = (out.astype(np.float32) - zero_point) * scale_factor
+        out = np.squeeze(out)
+        
+        if out.ndim == 2 and out.shape[0] < out.shape[1]: 
+            out = out.T
+            
+        if out.ndim < 2 or out.shape[1] < 5: 
+            return [], []
+            
+        # Class 0 is Person in most YOLO models
+        boxes = out[:, :4]
+        scores = out[:, 4] # Use Class 0 only
+        
+        mask = scores > conf_thresh
+        if not np.any(mask): 
+            return [], []
+            
+        f_boxes, f_scores = boxes[mask], scores[mask]
+        indices = self._nms(f_boxes, f_scores, NMS_THRESHOLD)
+        
+        coords_payload = []
+        alerts_payload = []
+        for i in indices:
+            cx_norm, cy_norm, bw_norm, bh_norm = f_boxes[i]
+            
+            # 320 is the ML size
+            cx = (cx_norm * 320 - pad_x) / frame_scale
+            cy = (cy_norm * 320 - pad_y) / frame_scale
+            bw = (bw_norm * 320) / frame_scale
+            bh = (bh_norm * 320) / frame_scale
+            
+            x1 = (cx - bw/2) 
+            y1 = (cy - bh/2) 
+            x2 = (cx + bw/2) 
+            y2 = (cy + bh/2) 
+            
+            conf = float(f_scores[i])
+            coords_payload.append({
+                'bbox': (float(max(0, x1)), float(max(0, y1)), float(min(ml_w, x2)), float(min(ml_h, y2))),
+                'cid': 0,
+                'conf': conf,
+                'class_name': 'Person'
+            })
+
+            # Generate alert for each new person detection (deduplicate by frame position bucket)
+            bucket = f"P{int(cx)//50}_{int(cy)//50}"
+            if bucket not in self.saved_violations:
+                self.saved_violations.add(bucket)
+                alerts_payload.append({
+                    "type": "person_detected",
+                    "conf": conf
+                })
+
+        # Cleanup to avoid mem leak
+        if len(self.saved_violations) > 500:
+            self.saved_violations.clear()
+            
+        return coords_payload, alerts_payload
